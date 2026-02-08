@@ -1,59 +1,383 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Trading Chart - Fan Version</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="https://unpkg.com/lightweight-charts@5.0.0/dist/lightweight-charts.standalone.production.js"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>스캘핑 시그널 (1s/1m/5m)</title>
+
+<style>
+:root{
+  --bg:#0b1220; --panel:#0f172a; --line:#1f2a44; --muted:#94a3b8;
+  --green:#22c55e; --red:#ef4444; --blue:#2563eb;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:#e5e7eb;font-family:Arial,sans-serif}
+
+.top{
+  display:flex;gap:10px;align-items:center;justify-content:space-between;
+  padding:10px 12px;background:var(--panel);border-bottom:1px solid var(--line)
+}
+.left{display:flex;flex-direction:column;gap:2px}
+.sym{font-weight:900}
+.price{font-size:13px;color:var(--muted)}
+.mid{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+button.tf{
+  padding:7px 10px;border-radius:10px;border:1px solid var(--line);
+  background:#0b1220;color:#e5e7eb;font-weight:800;cursor:pointer
+}
+button.tf.active{border-color:var(--blue);outline:1px solid rgba(37,99,235,.35)}
+.right{font-size:13px;text-align:right}
+#posSide{font-weight:900}
+#posEntry{font-weight:900}
+
+#chart{
+  width:100%;
+  height:60vh;
+  min-height:320px;
+  background:#020617;
+}
+#rsi{
+  width:100%;
+  height:20vh;
+  min-height:140px;
+  background:#020617;
+  border-top:1px solid var(--line);
+}
+
+.footer{
+  padding:8px 12px;border-top:1px solid var(--line);background:rgba(15,23,42,.25);
+  font-size:12px;color:var(--muted)
+}
+</style>
+
+<script>
+function loadScript(src){
+  return new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src=src; s.onload=res; s.onerror=rej;
+    document.head.appendChild(s);
+  });
+}
+(async ()=>{
+  try{
+    await loadScript('https://unpkg.com/lightweight-charts@5.0.0/dist/lightweight-charts.standalone.production.js');
+  }catch(e){
+    try{
+      await loadScript('https://cdn.jsdelivr.net/npm/lightweight-charts@5.0.0/dist/lightweight-charts.standalone.production.js');
+    }catch(e2){
+      document.body.innerHTML='<div style="padding:16px;color:white">차트 라이브러리 로드 실패. 네트워크/CDN 차단 가능.</div>';
+      return;
+    }
+  }
+  window.__lc_ready__=true;
+})();
+</script>
 </head>
+
 <body>
-    <div class="header">
-        <h1>💨 암호화폐 팬 트레이더 🚀</h1>
-        <p>실시간 BTC/USDT 차트 & 자동 거래</p>
-    </div>
+<div class="top">
+  <div class="left">
+    <div class="sym">BTCUSDT</div>
+    <div class="price">현재가: <b id="last">-</b></div>
+    <div class="price">상태: <b id="status">초기화중...</b></div>
+  </div>
 
-    <div class="fan-container">
-        <div class="fan-wheel">
-            <div class="fan-visual">
-                <div class="fan-blade"></div>
-                <div class="fan-blade"></div>
-                <div class="fan-blade"></div>
-                <div class="fan-center"></div>
-            </div>
+  <div class="mid">
+    <button class="tf" data-tf="1s">1s</button>
+    <button class="tf active" data-tf="1m">1m</button>
+    <button class="tf" data-tf="5m">5m</button>
+  </div>
 
-            <div class="fan-stats">
-                <div class="stat">
-                    <div class="label">현재가</div>
-                    <div class="value" id="price">$0</div>
-                </div>
-                <div class="stat">
-                    <div class="label">변화율</div>
-                    <div class="value" id="change">0%</div>
-                </div>
-                <div class="stat">
-                    <div class="label">거래 횟수</div>
-                    <div class="value" id="trades">0</div>
-                </div>
-            </div>
-        </div>
+  <div class="right">
+    <div>포지션: <b id="posSide">없음</b></div>
+    <div>진입가: <b id="posEntry">-</b></div>
+  </div>
+</div>
 
-        <div class="chart-container">
-            <div id="chart"></div>
-            <div id="info">
-                💰 잔고: <span id="balance">300</span> USDT | 📦 보유수량: <span id="position">0</span>
-            </div>
-        </div>
-    </div>
+<div id="chart"></div>
+<div id="rsi"></div>
 
-    <div id="buttons">
-        <button class="time" onclick="setIntervalType('1s')">⚡ 1초</button>
-        <button class="time" onclick="setIntervalType('1m')">📊 1분</button>
-        <button class="time" onclick="setIntervalType('5m')">📈 5분</button>
-        <button class="buy" onclick="buy()">✅ 매수</button>
-        <button class="sell" onclick="sell()">❌ 매도</button>
-    </div>
+<div class="footer">
+  표시 전용 · EMA200 추세 + EMA20/50 되돌림 + RSI 전환 · 1s/1m/5m
+</div>
 
-    <script src="script.js"></script>
+<script>
+(function waitLC(){
+  if(!window.__lc_ready__ || !window.LightweightCharts){
+    return setTimeout(waitLC,50);
+  }
+  main();
+})();
+
+function main(){
+  const statusEl = document.getElementById('status');
+  const lastEl = document.getElementById('last');
+
+  // ===== main chart
+  const chartEl = document.getElementById('chart');
+  const chart = LightweightCharts.createChart(chartEl, {
+    width: chartEl.clientWidth || window.innerWidth,
+    height: chartEl.clientHeight || 320,
+    layout:{background:{color:'#020617'},textColor:'#cbd5f5'},
+    grid:{vertLines:{color:'#1e293b'},horzLines:{color:'#1e293b'}},
+    timeScale:{timeVisible:true,secondsVisible:false},
+    rightPriceScale:{borderColor:'#1e293b'}
+  });
+
+  const candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries,{
+    upColor:'#26a69a',downColor:'#ef5350',borderVisible:false,
+    wickUpColor:'#26a69a',wickDownColor:'#ef5350'
+  });
+
+  // EMA lines
+  const ema20Series  = chart.addSeries(LightweightCharts.LineSeries,{lineWidth:2,color:'#60a5fa'});
+  const ema50Series  = chart.addSeries(LightweightCharts.LineSeries,{lineWidth:2,color:'#a78bfa'});
+  const ema200Series = chart.addSeries(LightweightCharts.LineSeries,{lineWidth:2,color:'#facc15'});
+
+  // ===== RSI chart
+  const rsiEl = document.getElementById('rsi');
+  const rsiChart = LightweightCharts.createChart(rsiEl, {
+    width: rsiEl.clientWidth || window.innerWidth,
+    height: rsiEl.clientHeight || 140,
+    layout:{background:{color:'#020617'},textColor:'#cbd5f5'},
+    grid:{vertLines:{color:'#1e293b'},horzLines:{color:'#1e293b'}},
+    timeScale:{timeVisible:true},
+    rightPriceScale:{borderColor:'#1e293b'}
+  });
+  const rsiSeries = rsiChart.addSeries(LightweightCharts.LineSeries,{lineWidth:2,color:'#38bdf8'});
+
+  // ===== 강제 리사이즈 (남색 화면 문제 해결 핵심)
+  function fitAll(){
+    const w1 = chartEl.clientWidth || window.innerWidth;
+    const h1 = chartEl.clientHeight || 320;
+    chart.resize(w1, h1);
+
+    const w2 = rsiEl.clientWidth || window.innerWidth;
+    const h2 = rsiEl.clientHeight || 140;
+    rsiChart.resize(w2, h2);
+  }
+  setTimeout(fitAll, 0);
+  setTimeout(fitAll, 200);
+  setTimeout(fitAll, 600);
+  window.addEventListener('resize', fitAll);
+
+  // ===== state
+  let tf='1m', wsKline=null, wsTrade=null;
+  let candles=[], markers=[];
+  let positionSide='NONE', entryPrice=null;
+  let cur1s=null; // {sec, open, high, low, close}
+
+  function updatePosUI(){
+    const sideEl=document.getElementById('posSide');
+    const entryEl=document.getElementById('posEntry');
+    if(positionSide==='NONE'){
+      sideEl.textContent='없음'; sideEl.style.color='';
+      entryEl.textContent='-';
+    }else if(positionSide==='LONG'){
+      sideEl.textContent='LONG'; sideEl.style.color='#22c55e';
+      entryEl.textContent=entryPrice.toFixed(2);
+    }else{
+      sideEl.textContent='SHORT'; sideEl.style.color='#ef4444';
+      entryEl.textContent=entryPrice.toFixed(2);
+    }
+  }
+  updatePosUI();
+
+  // ===== indicators
+  function emaNext(prev, price, period){
+    const k=2/(period+1);
+    return prev==null?price:(price*k+prev*(1-k));
+  }
+  function calcRSI(closes, period=14){
+    if(closes.length<period+1) return null;
+    let gains=0, losses=0;
+    for(let i=closes.length-period;i<closes.length;i++){
+      const d=closes[i]-closes[i-1];
+      if(d>=0) gains+=d; else losses-=d;
+    }
+    const rs=gains/(losses||1);
+    return 100-(100/(1+rs));
+  }
+  function near(v,t,pct=0.2){
+    const d=Math.abs(v-t)/t*100;
+    return d<=pct;
+  }
+
+  function computeAndDraw(){
+    if(candles.length<220) return;
+
+    const closes=candles.map(c=>c.close);
+    let e20=null,e50=null,e200=null;
+    const d20=[],d50=[],d200=[],drsi=[];
+
+    for(let i=0;i<candles.length;i++){
+      const c=candles[i].close;
+      e20=emaNext(e20,c,20);
+      e50=emaNext(e50,c,50);
+      e200=emaNext(e200,c,200);
+      d20.push({time:candles[i].time,value:e20});
+      d50.push({time:candles[i].time,value:e50});
+      d200.push({time:candles[i].time,value:e200});
+      const r=calcRSI(closes.slice(0,i+1),14);
+      if(r!=null) drsi.push({time:candles[i].time,value:r});
+    }
+
+    ema20Series.setData(d20);
+    ema50Series.setData(d50);
+    ema200Series.setData(d200);
+    rsiSeries.setData(drsi);
+
+    const last=candles[candles.length-1];
+    const lastE20=d20[d20.length-1].value;
+    const lastE50=d50[d50.length-1].value;
+    const lastE200=d200[d200.length-1].value;
+
+    const lastRSI=drsi[drsi.length-1]?.value ?? null;
+    const prevRSI=drsi[drsi.length-2]?.value ?? null;
+
+    const rsiUp= lastRSI!=null && prevRSI!=null && lastRSI>prevRSI;
+    const rsiDn= lastRSI!=null && prevRSI!=null && lastRSI<prevRSI;
+
+    const trendUp = last.close>lastE200;
+    const trendDn = last.close<lastE200;
+
+    const pullUp = near(last.close,lastE20,0.2)||near(last.close,lastE50,0.2);
+    const pullDn = near(last.close,lastE20,0.2)||near(last.close,lastE50,0.2);
+
+    const buy = trendUp && pullUp && lastRSI!=null && lastRSI<=40 && rsiUp;
+    const sell= trendDn && pullDn && lastRSI!=null && lastRSI>=60 && rsiDn;
+
+    const lastMarkerTime = markers.length?markers[markers.length-1].time:null;
+
+    if(buy && lastMarkerTime!==last.time && positionSide!=='LONG'){
+      positionSide='LONG'; entryPrice=last.close; updatePosUI();
+      markers.push({time:last.time,position:'belowBar',color:'#22c55e',shape:'arrowUp',text:'LONG'});
+      candleSeries.setMarkers(markers);
+    }else if(sell && lastMarkerTime!==last.time && positionSide!=='SHORT'){
+      positionSide='SHORT'; entryPrice=last.close; updatePosUI();
+      markers.push({time:last.time,position:'aboveBar',color:'#ef4444',shape:'arrowDown',text:'SHORT'});
+      candleSeries.setMarkers(markers);
+    }
+  }
+
+  function disconnect(){
+    try{wsKline?.close();}catch{}
+    try{wsTrade?.close();}catch{}
+    wsKline=wsTrade=null;
+  }
+
+  function resetAll(){
+    candles=[]; markers=[]; cur1s=null;
+    candleSeries.setMarkers([]);
+    // 캔들/지표 라인 초기화(빈 데이터)
+    candleSeries.setData([]);
+    ema20Series.setData([]);
+    ema50Series.setData([]);
+    ema200Series.setData([]);
+    rsiSeries.setData([]);
+
+    positionSide='NONE'; entryPrice=null; updatePosUI();
+  }
+
+  function connect(){
+    disconnect();
+    resetAll();
+    statusEl.textContent = '연결중...';
+
+    // 리사이즈 한번 더 강제
+    setTimeout(fitAll, 0);
+    setTimeout(fitAll, 300);
+
+    if(tf==='1s'){
+      chart.applyOptions({ timeScale:{ secondsVisible:true }});
+      statusEl.textContent = '1s 연결중...';
+
+      wsTrade = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@trade');
+
+      wsTrade.onopen = ()=> statusEl.textContent = '1s 연결됨';
+      wsTrade.onerror = ()=> statusEl.textContent = 'WS 에러(차단/네트워크)';
+      wsTrade.onclose = ()=> statusEl.textContent = 'WS 종료';
+
+      wsTrade.onmessage=(ev)=>{
+        const t=JSON.parse(ev.data);
+        const p=Number(t.p);
+        const sec=Math.floor(Date.now()/1000);
+        lastEl.textContent=p.toFixed(2);
+
+        // 1초봉 생성
+        if(!cur1s || cur1s.sec!==sec){
+          // 이전 초 확정해서 배열로 넣기
+          if(cur1s){
+            candles.push({
+              time:cur1s.sec,
+              open:cur1s.open,
+              high:cur1s.high,
+              low:cur1s.low,
+              close:cur1s.close
+            });
+            if(candles.length>350) candles.shift();
+            candleSeries.setData(candles);
+            computeAndDraw();
+          }
+          cur1s={sec,open:p,high:p,low:p,close:p};
+          candleSeries.update({time:sec,open:p,high:p,low:p,close:p});
+        }else{
+          cur1s.high=Math.max(cur1s.high,p);
+          cur1s.low=Math.min(cur1s.low,p);
+          cur1s.close=p;
+          candleSeries.update({time:sec,open:cur1s.open,high:cur1s.high,low:cur1s.low,close:cur1s.close});
+        }
+      };
+
+    } else {
+      chart.applyOptions({ timeScale:{ secondsVisible:false }});
+      statusEl.textContent = tf + ' 연결중...';
+
+      wsKline = new WebSocket(`wss://stream.binance.com:9443/ws/btcusdt@kline_${tf}`);
+
+      wsKline.onopen = ()=> statusEl.textContent = tf + ' 연결됨';
+      wsKline.onerror = ()=> statusEl.textContent = 'WS 에러(차단/네트워크)';
+      wsKline.onclose = ()=> statusEl.textContent = 'WS 종료';
+
+      wsKline.onmessage=(ev)=>{
+        const msg=JSON.parse(ev.data);
+        const k=msg.k;
+        const bar={
+          time:Math.floor(k.t/1000),
+          open:Number(k.o),
+          high:Number(k.h),
+          low:Number(k.l),
+          close:Number(k.c)
+        };
+        lastEl.textContent=bar.close.toFixed(2);
+
+        const last=candles[candles.length-1];
+        if(!last || last.time!==bar.time){
+          candles.push(bar);
+          if(candles.length>350) candles.shift();
+          candleSeries.setData(candles);
+        }else{
+          candles[candles.length-1]=bar;
+          candleSeries.update(bar);
+        }
+        computeAndDraw();
+      };
+    }
+  }
+
+  // 첫 연결
+  connect();
+
+  // TF 버튼
+  document.querySelectorAll('button.tf').forEach(btn=>{
+    btn.onclick=()=>{
+      document.querySelectorAll('button.tf').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      tf=btn.dataset.tf;
+      connect();
+    };
+  });
+}
+</script>
 </body>
 </html>
