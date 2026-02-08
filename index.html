@@ -3,46 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Trading Chart</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/lightweight-charts/3.5.0/lightweight-charts.min.js"></script>
-    <style>
-        body {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #f4f4f4;
-        }
-        #chart {
-            position: relative;
-            width: 80%;
-            height: 500px;
-        }
-    </style>
+    <title>Crypto Trading Chart - Fan Version</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/lightweight-charts@5.0.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
-    <div id="chart"></div>
-    <script>
-        const chart = LightweightCharts.createChart(document.getElementById('chart'), {
-            width: 800,
-            height: 500,
-        });
+    <div class="header">
+        <h1>💨 암호화폐 팬 트레이더 🚀</h1>
+        <p>실시간 BTC/USDT 차트 & 자동 거래</p>
+    </div>
 
-        const lineSeries = chart.addLineSeries({
-            color: 'rgb(255, 99, 71)',
-            lineWidth: 3,
-        });
+    <div class="fan-container">
+        <div class="fan-wheel">
+            <div class="fan-visual">
+                <div class="fan-blade"></div>
+                <div class="fan-blade"></div>
+                <div class="fan-blade"></div>
+                <div class="fan-center"></div>
+            </div>
 
-        // Sample data for the chart
-        lineSeries.setData([
-            { time: '2022-07-01', value: 50 },
-            { time: '2022-07-02', value: 60 },
-            { time: '2022-07-03', value: 55 },
-            { time: '2022-07-04', value: 70 },
-            { time: '2022-07-05', value: 65 },
-        ]);
-    </script>
+            <div class="fan-stats">
+                <div class="stat">
+                    <div class="label">현재가</div>
+                    <div class="value" id="price">$0</div>
+                </div>
+                <div class="stat">
+                    <div class="label">변화율</div>
+                    <div class="value" id="change">0%</div>
+                </div>
+                <div class="stat">
+                    <div class="label">거래 횟수</div>
+                    <div class="value" id="trades">0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <div id="chart"></div>
+            <div id="info">
+                💰 잔고: <span id="balance">300</span> USDT | 📦 보유수량: <span id="position">0</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="buttons">
+        <button class="time" onclick="setIntervalType('1s')">⚡ 1초</button>
+        <button class="time" onclick="setIntervalType('1m')">📊 1분</button>
+        <button class="time" onclick="setIntervalType('5m')">📈 5분</button>
+        <button class="buy" onclick="buy()">✅ 매수</button>
+        <button class="sell" onclick="sell()">❌ 매도</button>
+    </div>
+
+    <script src="script.js"></script>
 </body>
 </html>
