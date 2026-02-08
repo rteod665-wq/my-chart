@@ -1,84 +1,46 @@
 <!DOCTYPE html>
-<html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>EMA200 + RSI</title>
-<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+<title>My Chart</title>
+<script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
 <style>
-  body { margin:0; background:#0f172a; color:white; }
-  #chart { height:70vh; }
-  #rsi { height:30vh; }
+  body { margin:0; background:#0f172a; }
+  #chart { height:100vh; }
 </style>
 </head>
 
 <body>
-
 <div id="chart"></div>
-<div id="rsi"></div>
 
 <script>
 const chart = LightweightCharts.createChart(document.getElementById('chart'), {
-  layout: { background: { color: '#0f172a' }, textColor: '#DDD' },
-  grid: { vertLines: { color: '#1e293b' }, horzLines: { color: '#1e293b' } }
+  layout: {
+    background: { color: '#0f172a' },
+    textColor: '#e5e7eb'
+  },
+  grid: {
+    vertLines: { color: '#1e293b' },
+    horzLines: { color: '#1e293b' }
+  }
 });
 
-const candleSeries = chart.addCandlestickSeries();
-const emaSeries = chart.addLineSeries({ color: 'orange', lineWidth: 2 });
+const series = chart.addCandlestickSeries();
 
 const data = [];
 let price = 100;
 
-for (let i = 0; i < 100; i++) {
+for (let i = 0; i < 50; i++) {
   const open = price;
-  const close = price + (Math.random() - 0.5) * 5;
-  const high = Math.max(open, close) + Math.random() * 3;
-  const low = Math.min(open, close) - Math.random() * 3;
-
-  data.push({
-    time: i,
-    open, high, low, close
-  });
-
+  const close = open + (Math.random() - 0.5) * 5;
+  const high = Math.max(open, close) + Math.random() * 2;
+  const low = Math.min(open, close) - Math.random() * 2;
+  data.push({ time: i, open, high, low, close });
   price = close;
 }
 
-candleSeries.setData(data);
-
-// EMA 200 (간단 계산)
-let ema = data[0].close;
-const k = 2 / (200 + 1);
-const emaData = data.map(d => {
-  ema = d.close * k + ema * (1 - k);
-  return { time: d.time, value: ema };
-});
-
-emaSeries.setData(emaData);
-
-// RSI 차트
-const rsiChart = LightweightCharts.createChart(document.getElementById('rsi'), {
-  layout: { background: { color: '#020617' }, textColor: '#DDD' },
-  grid: { vertLines: { color: '#1e293b' }, horzLines: { color: '#1e293b' } }
-});
-
-const rsiSeries = rsiChart.addLineSeries({ color: '#22d3ee' });
-
-let gains = 0, losses = 0;
-const rsiData = [];
-
-for (let i = 1; i < data.length; i++) {
-  const diff = data[i].close - data[i-1].close;
-  gains += diff > 0 ? diff : 0;
-  losses += diff < 0 ? -diff : 0;
-
-  const rs = losses === 0 ? 100 : gains / losses;
-  const rsi = 100 - (100 / (1 + rs));
-
-  rsiData.push({ time: data[i].time, value: rsi });
-}
-
-rsiSeries.setData(rsiData);
+series.setData(data);
 </script>
-
 </body>
 </html>
+
