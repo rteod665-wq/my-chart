@@ -1,46 +1,48 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>My Chart</title>
-<script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
-<style>
-  body { margin:0; background:#0f172a; }
-  #chart { height:100vh; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto Trading Chart</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lightweight-charts/3.5.0/lightweight-charts.min.js"></script>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f4f4f4;
+        }
+        #chart {
+            position: relative;
+            width: 80%;
+            height: 500px;
+        }
+    </style>
 </head>
-
 <body>
-<div id="chart"></div>
+    <div id="chart"></div>
+    <script>
+        const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+            width: 800,
+            height: 500,
+        });
 
-<script>
-const chart = LightweightCharts.createChart(document.getElementById('chart'), {
-  layout: {
-    background: { color: '#0f172a' },
-    textColor: '#e5e7eb'
-  },
-  grid: {
-    vertLines: { color: '#1e293b' },
-    horzLines: { color: '#1e293b' }
-  }
-});
+        const lineSeries = chart.addLineSeries({
+            color: 'rgb(255, 99, 71)',
+            lineWidth: 3,
+        });
 
-const series = chart.addCandlestickSeries();
-
-const data = [];
-let price = 100;
-
-for (let i = 0; i < 50; i++) {
-  const open = price;
-  const close = open + (Math.random() - 0.5) * 5;
-  const high = Math.max(open, close) + Math.random() * 2;
-  const low = Math.min(open, close) - Math.random() * 2;
-  data.push({ time: i, open, high, low, close });
-  price = close;
-}
-
-series.setData(data);
-</script>
+        // Sample data for the chart
+        lineSeries.setData([
+            { time: '2022-07-01', value: 50 },
+            { time: '2022-07-02', value: 60 },
+            { time: '2022-07-03', value: 55 },
+            { time: '2022-07-04', value: 70 },
+            { time: '2022-07-05', value: 65 },
+        ]);
+    </script>
 </body>
 </html>
-
