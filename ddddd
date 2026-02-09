@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dcoder Canvas Chart (1s/1m/5m)</title>
+<style>
+  body{margin:0;background:#0b1220;color:#e5e7eb;font-family:Arial,sans-serif}
+  .top{padding:10px 12px;background:#0f172a;border-bottom:1px solid #1f2a44;display:flex;gap:10px;align-items:center;justify-content:space-between}
+  .left{display:flex;flex-direction:column;gap:4px}
+  .sym{font-weight:900}
+  .muted{color:#94a3b8;font-size:13px}
+  .mid{display:flex;gap:6px;flex-wrap:wrap}
+  button{padding:7px 10px;border-radius:10px;border:1px solid #1f2a44;background:#0b1220;color:#e5e7eb;font-weight:800}
+  button.active{border-color:#2563eb;outline:1px solid rgba(37,99,235,.35)}
+  #wrap{padding:10px}
+  canvas{display:block;width:100%;height:380px;background:#020617;border:1px solid #1f2a44;border-radius:8px}
+  #log{height:150px;overflow:auto;background:#020617;border-top:1px solid #1f2a44;padding:8px 10px;font-size:12px;white-space:pre-wrap;line-height:1.6}
+</style>
+</head>
+<body>
+  <div class="top">
+    <div class="left">
+      <div class="sym">BTCUSDT</div>
+      <div class="muted">상태: <b id="status">준비중...</b> · 현재가: <b id="last">-</b></div>
+      <div class="muted" id="info">TF: -</div>
+    </div>
+    <div class="mid">
+      <button class="tf" data-tf="1s">1s</button>
+      <button class="tf active" data-tf="1m">1m</button>
+      <button class="tf" data-tf="5m">5m</button>
+    </div>
+  </div>
+
+  <div id="wrap">
+    <canvas id="cv"></canvas>
+  </div>
+  <div id="log">로그:\n</div>
+
+<script>
+const statusEl = document.getElementById('status');
+const lastEl   = document.getElementById('last');
+const infoEl   = document.getElementById('info');
+const logEl    = document.getElementById('log');
+const cv       = document.getElementById('cv');
+const ctx      = cv.getContext('2d');
+
+function log(msg){
+  logEl.textContent = `로그:\n${msg}\n` + logEl.textContent.replace(/^로그:\n/,'');
+}
+
+// 캔버스 리사이즈 (Dcoder WebView 대응)
+function resizeCanvas(){
+  const w = Math.max(360, window.innerWidth || 360);
+  const h = 380;
+  cv.width = w;
+  cv.height = h;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// 캔들 그리기
+function drawCandles(bars){
+  const w = cv.width, h = cv.height;
+  ctx.clearRect(0,0,w,h);
+
+  if(!bars.length){
+    ctx.fillStyle='#94a3b8';
+    ctx.font='14px Arial';
+    ctx.fillText('데이터 로딩중...', 12, 24);
+    return;
+  }
+
+  // 가격 범위
+  let min = Infinity, max = -Infinity;
+  for(const b of bars){
+    min = Math.min(min, b.low);
+    max = Math.max(max, b.high);
+  }
+  const pad = (max-min)*0.05 || 1;
+  min -= pad; max += pad;
+
+  const priceToY = (p)=> h - ((p-min)/(max-min))*h;
+
+  const N = bars.length;
+  const cw = Math.max(3, Math.floor(w / N)); // 캔들 폭
+
+  // 배경 그리드(간단)
+  ctx.strokeStyle = '#1f2a44';
+  ctx.lineWidth = 1;
+  for(let i=1;i<5;i++){
+    const y = (h*i)/5;
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+  }
+
+  for(let i=0;i<N;i++){
+    const b = bars[i];
+    const x = i*cw + 2;
+
+    const yO = priceToY(b.open);
+    const yC = priceToY(b.close);
+    const yH = priceToY(b.high);
+    const yL = priceToY(b.low);
+
+    const up = b.close >= b.open;
+    ctx.strokeStyle = up ? '#22c55e' : '#ef4444';
+    ctx.fillStyle   = up ? '#22c55e' : '#ef4444';
+
+    // wick
+    ctx.beginPath();
+    ctx.moveTo(x + cw/2, yH);
+    ctx.lineTo(x + cw/2, yL);
+    ctx.stroke();
+
+    // body
+    const top = Math.min(yO, yC);
+    const bot = Math.max(yO, yC);
+    const bh = Math.max(1, bot-top);
+    ctx.fillRect(x, top, Math.max(2, cw-4), bh);
+  }
+
+  // 최신가 표시
+  const last = bars[bars.length-1];
+  ctx.fillStyle='#e5e7eb';
+  ctx.font='13px Arial';
+  ctx.fillText('Last: ' + last.close.toFixed(2), 12, 20);
+}
+
+async function fetchHistory(tf){
+  // 1초봉 과거 없음(실시간부터)
+  if(tf === '1s') return [];
+  const limit = 200;
+  const url = `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${tf}&limit=${limit}`;
+  statusEl.textContent = tf + ' 과거 불러오는 중...';
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('history fetch failed');
+  const arr = await res.json();
+  return arr.map(k=>({
+    time: Math.floor(k[0]/1000),
+    open: +k[1], high:+k[2], low:+k[3], close:+k[4]
+  }));
+}
+
+let tf = '1m';
+let data = [];
+let ws = null;
+
+// 1초봉 생성용(실시간 trade로)
+let cur1s = null;
+
+function reset(){
+  data = [];
+  cur1s = null;
+  drawCandles([]);
+}
+
+async function connect(){
+  if(ws) try{ws.close()}catch{}
+  ws = null;
+  reset();
+  infoEl.textContent = 'TF: ' + tf;
+
+  // 1m/5m은 과거 먼저
+  if(tf !== '1s'){
+    try{
+      const hist = await fetchHistory(tf);
+      data = hist;
+      drawCandles(data);
+    }catch(e){
+      statusEl.textContent = '과거 로딩 실패';
+      log(e.message || e);
+    }
+  }else{
+    statusEl.textContent = '1s는 실시간부터 생성';
+  }
+
+  // 실시간 연결
+  if(tf === '1s'){
+    statusEl.textContent = '1s 연결중...';
+    ws = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@trade');
+    ws.onopen = ()=> statusEl.textContent = '1s 실시간 연결됨';
+    ws.onerror= ()=> statusEl.textContent = 'WS 에러/차단';
+    ws.onmessage = (ev)=>{
+      const t = JSON.parse(ev.data);
+      const p = Number(t.p);
+      lastEl.textContent = p.toFixed(2);
+      const sec = Math.floor(Date.now()/1000);
+
+      if(!cur1s || cur1s.sec !== sec){
+        // 이전 초 확정
+        if(cur1s){
+          data.push({time:cur1s.sec, open:cur1s.open, high:cur1s.high, low:cur1s.low, close:cur1s.close});
+          if(data.length > 220) data.shift();
+        }
+        // 새 초 시작
+        cur1s = {sec, open:p, high:p, low:p, close:p};
+      }else{
+        // 같은 초 업데이트
+        cur1s.high = Math.max(cur1s.high, p);
+        cur1s.low  = Math.min(cur1s.low, p);
+        cur1s.close = p;
+      }
+
+      // 화면에는 확정된 data + 현재 진행중 1초봉을 합쳐서 그리기
+      const view = cur1s ? data.concat([{time:cur1s.sec, open:cur1s.open, high:cur1s.high, low:cur1s.low, close:cur1s.close}]) : data;
+      drawCandles(view);
+    };
+    ws.onclose = ()=> log('WS close');
+  } else {
+    statusEl.textContent = tf + ' 실시간 연결중...';
+    ws = new WebSocket(`wss://stream.binance.com:9443/ws/btcusdt@kline_${tf}`);
+    ws.onopen = ()=> statusEl.textContent = tf + ' 실시간 연결됨';
+    ws.onerror= ()=> statusEl.textContent = 'WS 에러/차단';
+    ws.onmessage = (ev)=>{
+      const msg = JSON.parse(ev.data);
+      const k = msg.k;
+      const bar = {time:Math.floor(k.t/1000), open:+k.o, high:+k.h, low:+k.l, close:+k.c};
+      lastEl.textContent = bar.close.toFixed(2);
+
+      const last = data[data.length-1];
+      if(!last || last.time !== bar.time){
+        data.push(bar);
+        if(data.length > 220) data.shift();
+      }else{
+        data[data.length-1] = bar;
+      }
+      drawCandles(data);
+    };
+    ws.onclose = ()=> log('WS close');
+  }
+}
+
+document.querySelectorAll('button.tf').forEach(btn=>{
+  btn.onclick = ()=>{
+    document.querySelectorAll('button.tf').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    tf = btn.dataset.tf;
+    connect();
+  };
+});
+
+// 시작
+connect();
+</script>
+</body>
+</html>
